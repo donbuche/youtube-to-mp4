@@ -37,6 +37,7 @@ const coverFrameValue = document.getElementById('coverFrameValue');
 const beginTimeValue  = document.getElementById('beginTimeValue');
 const beginTimeMax    = document.getElementById('beginTimeMax');
 const rangeSelection  = document.getElementById('rangeSelection');
+const rangePlaybackProgress = document.getElementById('rangePlaybackProgress');
 const rangeStartLabel = document.getElementById('rangeStartLabel');
 const rangeDurationLabel = document.getElementById('rangeDurationLabel');
 const rangeEndLabel   = document.getElementById('rangeEndLabel');
@@ -155,8 +156,21 @@ function syncCoverFrameRange(preferredValue = null) {
   coverFrameValue.textContent = formatSeconds(nextValue);
 }
 
+function resetRangePlaybackProgress() {
+  rangePlaybackProgress.style.width = '0%';
+}
+
+function updateRangePlaybackProgress(currentTime) {
+  const start = Number(beginTimeRange.value || 0);
+  const end = Number(endTimeRange.value || start + SLIDER_STEP);
+  const duration = Math.max(SLIDER_STEP, end - start);
+  const progress = ((currentTime - start) / duration) * 100;
+  rangePlaybackProgress.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+}
+
 function stopPreviewLoop() {
   previewLoopActive = false;
+  resetRangePlaybackProgress();
 
   previewLoopLabel.textContent = 'Play clip';
   previewLoopToggle.querySelector('[data-lucide]')?.setAttribute('data-lucide', 'play');
@@ -192,6 +206,7 @@ function startPreviewLoop() {
   previewPlaceholder.classList.add('hidden');
   previewPlayerHost.currentTime = start;
   previewPlayerHost.muted = previewMuted;
+  updateRangePlaybackProgress(start);
   previewPlayerHost.play().catch(() => {
     stopPreviewLoop();
   });
@@ -204,6 +219,7 @@ function refreshPreviewFrame(second) {
     previewPlayerHost.classList.remove('hidden');
     previewPlayerHost.currentTime = second;
     previewPlayerHost.pause();
+    resetRangePlaybackProgress();
   }
 }
 
@@ -236,6 +252,7 @@ function resetPreview() {
   previewMuted = true;
   currentPreviewSourceUrl = '';
   stopPreviewLoop();
+  resetRangePlaybackProgress();
   beginTimeRange.max = '0';
   endTimeRange.max = '0';
   beginTimeRange.value = '0';
@@ -423,7 +440,9 @@ previewPlayerHost.addEventListener('timeupdate', () => {
   if (previewLoopActive) {
     const start = Number(beginTimeRange.value || 0);
     const end = Number(endTimeRange.value || start + 1);
+    updateRangePlaybackProgress(previewPlayerHost.currentTime);
     if (previewPlayerHost.currentTime >= end) {
+      updateRangePlaybackProgress(end);
       previewPlayerHost.currentTime = start;
       previewPlayerHost.play().catch(() => {
         stopPreviewLoop();

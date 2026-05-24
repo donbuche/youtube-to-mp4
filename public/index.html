@@ -270,7 +270,9 @@
               <div class="space-y-3">
                 <div class="relative h-8 flex items-center">
                   <div class="absolute inset-x-0 h-3 rounded-full bg-slate-200 dark:bg-slate-700"></div>
-                  <div id="rangeSelection" class="absolute h-3 rounded-full bg-brand-500"></div>
+                  <div id="rangeSelection" class="absolute h-3 rounded-full bg-brand-500 overflow-hidden">
+                    <div id="rangePlaybackProgress" class="h-full w-0 rounded-full bg-white/35 transition-[width] duration-100"></div>
+                  </div>
                   <div class="range-stack">
                     <input
                       type="range"
