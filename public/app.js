@@ -31,6 +31,7 @@ const previewPlaceholder = document.getElementById('video-preview-placeholder');
 const beginTimeInput  = document.getElementById('beginTime');
 const beginTimeRange  = document.getElementById('beginTimeRange');
 const endTimeRange    = document.getElementById('endTimeRange');
+const clipRangeTrack  = document.getElementById('clip-range-track');
 const coverFrameRange = document.getElementById('coverFrameRange');
 const coverFrameInput = document.getElementById('coverFrameTime');
 const coverFrameValue = document.getElementById('coverFrameValue');
@@ -303,6 +304,44 @@ function handleEndRangeInput() {
   stopPreviewLoop();
 }
 
+function getTrackTimeFromPointer(clientX) {
+  const rect = clipRangeTrack.getBoundingClientRect();
+  const ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+  const boundedRatio = Math.min(1, Math.max(0, ratio));
+  const max = Math.max(0, Number(beginTimeRange.max) || 0);
+  return roundToStep(boundedRatio * max);
+}
+
+function handleClipTrackLeftClick(event) {
+  if (event.target.closest('input[type="range"]')) return;
+
+  const max = Math.max(0, Number(beginTimeRange.max) || 0);
+  const nextStart = Math.min(Math.max(0, getTrackTimeFromPointer(event.clientX)), max);
+  const currentEnd = Math.max(0, Number(endTimeRange.value) || 0);
+  const nextEnd = roundToStep(Math.min(max, Math.max(currentEnd, nextStart + SLIDER_STEP)));
+
+  beginTimeRange.value = nextStart.toFixed(1);
+  endTimeRange.value = nextEnd.toFixed(1);
+  updateRangeVisuals();
+  refreshPreviewFrame(nextStart);
+}
+
+function handleClipTrackRightClick(event) {
+  if (event.target.closest('input[type="range"]')) return;
+
+  event.preventDefault();
+
+  const max = Math.max(0, Number(endTimeRange.max) || 0);
+  const nextEnd = Math.min(Math.max(0, getTrackTimeFromPointer(event.clientX)), max);
+  const currentStart = Math.max(0, Number(beginTimeRange.value) || 0);
+  const nextStart = roundToStep(Math.max(0, Math.min(currentStart, nextEnd - SLIDER_STEP)));
+
+  beginTimeRange.value = nextStart.toFixed(1);
+  endTimeRange.value = Math.max(nextEnd, nextStart + SLIDER_STEP).toFixed(1);
+  updateRangeVisuals();
+  refreshPreviewFrame(Number(endTimeRange.value));
+}
+
 function handleCoverFrameInput() {
   const maxCoverValue = Math.max(0, previewDurationLimit);
   const selected = roundToStep(Math.min(maxCoverValue, Math.max(0, Number(coverFrameRange.value) || 0)));
@@ -409,6 +448,8 @@ urlInput.addEventListener('input', () => {
 
 beginTimeRange.addEventListener('input', handleStartRangeInput);
 endTimeRange.addEventListener('input', handleEndRangeInput);
+clipRangeTrack.addEventListener('click', handleClipTrackLeftClick);
+clipRangeTrack.addEventListener('contextmenu', handleClipTrackRightClick);
 coverFrameRange.addEventListener('input', handleCoverFrameInput);
 previewLoopToggle.addEventListener('click', () => {
   if (previewLoopActive) {
