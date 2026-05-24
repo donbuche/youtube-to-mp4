@@ -59,7 +59,7 @@ brew install ffmpeg yt-dlp
 
 ```bash
 # 1. Clone and install dependencies
-git clone https://github.com/donbuche/youtube-to-gif.git
+git clone https://github.com/donbuche/youtube-to-mp4.git
 cd youtube-to-mp4
 npm install
 
@@ -182,7 +182,7 @@ Pull requests are welcome. For major changes, please open an issue first to disc
 
 ## License
 
-[MIT](LICENSE)
+[MIT License](LICENSE)
 
 ---
 
