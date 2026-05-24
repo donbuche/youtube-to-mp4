@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube to MP4 Converter</title>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <!-- CDN must load first so tailwind global exists before we configure it -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50:  '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            },
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <style>
+    .terminal::-webkit-scrollbar { width: 6px; }
+    .terminal::-webkit-scrollbar-track { background: transparent; }
+    .terminal::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    .terminal::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    .spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }
+
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-in { animation: fade-in 0.35s ease both; }
+
+    input[type="range"] {
+      accent-color: #4f46e5;
+    }
+
+    #video-player {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .range-stack {
+      position: relative;
+      width: 100%;
+      height: 2rem;
+    }
+
+    .range-stack input[type="range"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      margin: 0;
+      background: transparent;
+      pointer-events: none;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    .range-stack input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      pointer-events: auto;
+      width: 1.125rem;
+      height: 1.125rem;
+      border-radius: 9999px;
+      background: #4f46e5;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+      cursor: pointer;
+      margin-top: -0.1875rem;
+    }
+
+    .range-stack input[type="range"]::-moz-range-thumb {
+      pointer-events: auto;
+      width: 1.125rem;
+      height: 1.125rem;
+      border-radius: 9999px;
+      background: #4f46e5;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+      cursor: pointer;
+    }
+
+    .range-stack input[type="range"]::-webkit-slider-runnable-track {
+      height: 0.75rem;
+      background: transparent;
+      border-radius: 9999px;
+    }
+
+    .range-stack input[type="range"]::-moz-range-track {
+      height: 0.75rem;
+      background: transparent;
+      border-radius: 9999px;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans min-h-screen transition-colors duration-300">
+
+  <!-- ========== TOPBAR ========== -->
+  <header class="fixed top-0 inset-x-0 h-16 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 z-20">
+    <!-- Logo + title -->
+    <div class="flex flex-1 items-center justify-center">
+      <div class="flex h-8 items-center justify-center flex-shrink-0">
+        <img
+          src="/assets/logo-dark.png"
+          alt="YouTube to MP4"
+          class="block h-8 w-auto dark:hidden"
+        />
+        <img
+          src="/assets/logo-light.png"
+          alt="YouTube to MP4"
+          class="hidden h-8 w-auto dark:block"
+        />
+      </div>
+    </div>
+    <!-- Right actions -->
+    <div class="flex items-center gap-2">
+      <a href="https://github.com/donbuche/youtube-to-mp4" target="_blank" rel="noopener"
+        class="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" aria-label="GitHub">
+        <i data-lucide="github" class="w-5 h-5"></i>
+      </a>
+      <button id="theme-toggle" aria-label="Toggle theme"
+        class="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+        <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
+        <i data-lucide="moon" class="w-5 h-5 block dark:hidden"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ========== MAIN CONTENT ========== -->
+  <main class="pt-16 min-h-screen">
+    <div class="max-w-6xl mx-auto p-4 lg:p-8 space-y-6">
+
+      <!-- Page header -->
+      <div class="pt-2">
+        <h2 class="text-2xl font-bold text-slate-900 dark:text-white">Convert YouTube to MP4</h2>
+        <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Paste a YouTube URL, configure the options and download a lightweight MP4 clip.</p>
+      </div>
+
+      <!-- ===== FORM CARD ===== -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+
+        <!-- Card header -->
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-brand-100 dark:bg-brand-900/40 flex items-center justify-center">
+            <i data-lucide="video" class="w-4 h-4 text-brand-600 dark:text-brand-400"></i>
+          </div>
+          <div>
+            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Video Source</h3>
+            <p class="text-xs text-slate-400">Enter the YouTube video URL</p>
+          </div>
+        </div>
+
+        <form id="convert-form" class="p-6 space-y-8" novalidate>
+
+          <!-- Video preview -->
+          <div id="video-preview-panel" class="hidden space-y-4">
+            <div class="rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800">
+              <div class="relative aspect-video">
+                <video
+                  id="video-player"
+                  class="absolute inset-0 hidden"
+                  playsinline
+                  preload="metadata"
+                  muted
+                ></video>
+                <div id="video-preview-placeholder" class="absolute inset-0 flex items-center justify-center bg-slate-950/40 text-white">
+                  <div class="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 text-sm font-medium backdrop-blur-sm">
+                    <i data-lucide="play-circle" class="h-4 w-4"></i>
+                    Preview loading
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="space-y-2">
+              <div class="flex items-center justify-between gap-3">
+                <label for="beginTimeRange" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Clip range
+                </label>
+                <div class="flex items-center gap-2 text-xs font-mono text-slate-500 dark:text-slate-400">
+                  <span id="beginTimeValue">3s</span>
+                  <span>/</span>
+                  <span id="beginTimeMax">0s</span>
+                </div>
+              </div>
+              <div class="space-y-3">
+                <div class="relative h-8 flex items-center">
+                  <div class="absolute inset-x-0 h-3 rounded-full bg-slate-200 dark:bg-slate-700"></div>
+                  <div id="rangeSelection" class="absolute h-3 rounded-full bg-brand-500"></div>
+                  <div class="range-stack">
+                    <input
+                      type="range"
+                      id="beginTimeRange"
+                      min="0"
+                      max="0"
+                      step="1"
+                      value="3"
+                      class="cursor-pointer"
+                    />
+                    <input
+                      type="range"
+                      id="endTimeRange"
+                      min="0"
+                      max="0"
+                      step="1"
+                      value="18"
+                      class="cursor-pointer"
+                    />
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                  <span id="rangeStartLabel" class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">Start 3s</span>
+                  <span id="rangeDurationLabel" class="inline-flex items-center rounded-full bg-brand-50 px-2.5 py-1 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300">Duration 15s</span>
+                  <span id="rangeEndLabel" class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">End 18s</span>
+                </div>
+              </div>
+              <input type="hidden" id="beginTime" name="beginTime" value="3" />
+              <input type="hidden" id="duration" name="duration" value="15" />
+              <p class="text-xs text-slate-400">Move the left handle to choose the clip start and the right handle to set where the MP4 ends. Use the button to preview the selected segment in a loop.</p>
+              <div class="pt-5 flex justify-center">
+                <div class="flex items-center gap-3">
+                  <button
+                    type="button"
+                    id="preview-loop-toggle"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <i data-lucide="play" class="h-3.5 w-3.5"></i>
+                    <span id="preview-loop-label">Play clip</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="preview-sound-toggle"
+                    class="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <i data-lucide="volume-x" class="h-3.5 w-3.5"></i>
+                    <span id="preview-sound-label">Muted</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- URL Input -->
+          <div>
+            <label for="url" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+              YouTube URL <span class="text-red-500">*</span>
+            </label>
+            <div class="relative">
+              <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                <i data-lucide="link" class="w-4 h-4 text-slate-400"></i>
+              </div>
+              <input type="url" id="url" name="url" required
+                placeholder="https://www.youtube.com/watch?v=..."
+                class="w-full min-h-16 pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-[1.25rem] focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition" />
+            </div>
+            <p id="url-error" class="mt-1.5 text-xs text-red-500 hidden">Please enter a valid YouTube URL.</p>
+          </div>
+
+          <!-- Divider -->
+          <div class="flex items-center gap-3">
+            <div class="flex-1 h-px bg-slate-200 dark:bg-slate-700"></div>
+            <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+              <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5"></i>
+              Output options
+            </div>
+            <div class="flex-1 h-px bg-slate-200 dark:bg-slate-700"></div>
+          </div>
+
+          <!-- Options grid -->
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- FPS -->
+            <div>
+              <label for="fps" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                Frames per second
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <i data-lucide="gauge" class="w-4 h-4 text-slate-400"></i>
+                </div>
+                <input type="number" id="fps" name="fps" min="1" max="60" value="30" placeholder="30"
+                  class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition" />
+              </div>
+              <p class="mt-1.5 text-xs text-slate-400">Default: 30 fps</p>
+            </div>
+
+            <!-- Size -->
+            <div>
+              <label for="size" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                Output size
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <i data-lucide="maximize-2" class="w-4 h-4 text-slate-400"></i>
+                </div>
+                <input type="text" id="size" name="size" value="768x432" placeholder="768x432"
+                  class="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition" />
+              </div>
+              <p class="mt-1.5 text-xs text-slate-400">Default: 768x432. Use 16:9 sizes for best results.</p>
+            </div>
+
+            <!-- Output filename -->
+            <div>
+              <label for="output" class="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">
+                Output filename
+              </label>
+              <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                  <i data-lucide="file" class="w-4 h-4 text-slate-400"></i>
+                </div>
+                <input type="text" id="output" name="output" placeholder="my-awesome-clip"
+                  class="w-full pl-10 pr-16 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition" />
+                <div class="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                  <span class="text-xs font-mono text-slate-400">.mp4</span>
+                </div>
+              </div>
+              <div class="mt-1.5 text-xs text-slate-400">
+                <span>Leave empty to auto-generate a filename.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3 pt-1 sm:flex-row sm:items-center sm:justify-between">
+            <a
+              href="/output"
+              target="_blank"
+              rel="noopener"
+              class="inline-flex items-center gap-1.5 text-xs text-brand-500 hover:text-brand-600 hover:underline"
+            >
+              <i data-lucide="folder-open" class="h-3.5 w-3.5"></i>
+              <span>Open the output folder to view your MP4 clips</span>
+            </a>
+            <label for="verbose" class="inline-flex cursor-pointer items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+              <input
+                type="checkbox"
+                id="verbose"
+                name="verbose"
+                checked
+                class="h-4 w-4 rounded border-slate-300 bg-slate-50 text-brand-600 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-800"
+              />
+              <span>Detailed logs</span>
+            </label>
+          </div>
+
+          <!-- Submit -->
+          <div class="pt-2">
+            <button type="submit" id="submit-btn"
+              class="w-full flex items-center justify-center gap-2.5 px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-semibold text-sm transition-colors shadow-lg shadow-brand-500/20 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900">
+              <i data-lucide="wand-2" class="w-4 h-4" id="btn-icon"></i>
+              <span id="btn-text">Convert to MP4</span>
+            </button>
+          </div>
+
+        </form>
+      </div>
+
+      <!-- ===== PROGRESS CARD ===== -->
+      <div id="progress-card" class="hidden fade-in bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
+              <i data-lucide="loader-2" class="w-4 h-4 text-amber-600 dark:text-amber-400 spinner"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Converting…</h3>
+              <p class="text-xs text-slate-400">This may take a few minutes depending on video length</p>
+            </div>
+          </div>
+          <div id="status-badge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 pulse-dot"></span>
+            <span id="status-text">Running</span>
+          </div>
+        </div>
+
+        <div class="px-6 pt-4">
+          <div class="h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div id="progress-bar" class="h-full bg-brand-500 rounded-full transition-all duration-500" style="width: 0%">
+              <div class="h-full w-1/3 bg-white/30 rounded-full animate-pulse"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="flex gap-1.5">
+              <div class="w-3 h-3 rounded-full bg-red-400"></div>
+              <div class="w-3 h-3 rounded-full bg-amber-400"></div>
+              <div class="w-3 h-3 rounded-full bg-green-400"></div>
+            </div>
+            <span class="text-xs font-mono text-slate-400 ml-1">process output</span>
+          </div>
+          <div id="log-output"
+            class="terminal bg-slate-950 text-green-400 font-mono text-xs leading-relaxed p-4 rounded-xl h-64 overflow-y-auto whitespace-pre-wrap break-all">
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== RESULT CARD ===== -->
+      <div id="result-card" class="hidden fade-in bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <i data-lucide="check-circle-2" class="w-4 h-4 text-green-600 dark:text-green-400"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-semibold text-slate-900 dark:text-white">MP4 ready!</h3>
+              <p class="text-xs text-slate-400">Your MP4 clip has been generated successfully</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
+            <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            Done
+          </div>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="rounded-xl overflow-hidden bg-slate-100 dark:bg-slate-800 flex items-center justify-center min-h-48">
+            <video id="result-video" class="max-w-full rounded-xl" controls playsinline preload="metadata"></video>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <a id="download-btn" href="#" download
+              class="flex-1 flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-semibold text-sm transition-colors shadow-lg shadow-brand-500/20 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              Download MP4
+            </a>
+            <button id="new-conversion-btn"
+              class="flex-1 flex items-center justify-center gap-2.5 px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 font-semibold text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-slate-300 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              New conversion
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ERROR CARD ===== -->
+      <div id="error-card" class="hidden fade-in bg-white dark:bg-slate-900 rounded-2xl border border-red-200 dark:border-red-900/50 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-900/50 flex items-center justify-between">
+          <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+              <i data-lucide="alert-circle" class="w-4 h-4 text-red-500"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-semibold text-red-700 dark:text-red-400">Conversion failed</h3>
+              <p class="text-xs text-red-500" id="error-message">An error occurred during conversion.</p>
+            </div>
+          </div>
+          <button id="retry-btn"
+            class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-900/50 font-medium text-xs transition-colors">
+            <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+            Try again
+          </button>
+        </div>
+      </div>
+
+      <!-- ===== INFO CARD ===== -->
+      <div id="how-it-works" class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
+            <i data-lucide="info" class="w-4 h-4 text-slate-500 dark:text-slate-400"></i>
+          </div>
+          <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Requirements & tips</h3>
+        </div>
+        <div class="p-6">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            <div class="flex gap-3">
+              <div class="w-8 h-8 rounded-lg bg-brand-50 dark:bg-brand-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="package" class="w-4 h-4 text-brand-500"></i>
+              </div>
+              <div>
+                <p class="text-sm font-medium text-slate-800 dark:text-slate-200">Dependencies</p>
+                <p class="text-xs text-slate-400 mt-0.5">Requires <code class="font-mono text-brand-500">ffmpeg</code> and <code class="font-mono text-brand-500">yt-dlp</code> installed on the server.</p>
+              </div>
+            </div>
+            <div class="flex gap-3">
+              <div class="w-8 h-8 rounded-lg bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="clock" class="w-4 h-4 text-amber-500"></i>
+              </div>
+              <div>
+                <p class="text-sm font-medium text-slate-800 dark:text-slate-200">Processing time</p>
+                <p class="text-xs text-slate-400 mt-0.5">Conversion time depends on video quality, duration and server speed.</p>
+              </div>
+            </div>
+            <div class="flex gap-3">
+              <div class="w-8 h-8 rounded-lg bg-green-50 dark:bg-green-900/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i data-lucide="lightbulb" class="w-4 h-4 text-green-500"></i>
+              </div>
+              <div>
+                <p class="text-sm font-medium text-slate-800 dark:text-slate-200">Best results</p>
+                <p class="text-xs text-slate-400 mt-0.5">Start with the default 30 fps and 768x432 preset, then keep the selected clip short for a lightweight MP4.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="px-4 pb-2 text-center">
+        <p class="text-sm text-slate-500 dark:text-slate-400">
+          Developed with ❤️ in Arenys de Munt, by Joan Galtes i Moreno
+        </p>
+        <a
+          href="https://github.com/donbuche/youtube-to-mp4"
+          target="_blank"
+          rel="noopener"
+          class="mt-2 inline-flex items-center gap-2 text-sm text-slate-500 hover:text-brand-600 dark:text-slate-400 dark:hover:text-brand-400"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true" class="h-4 w-4 fill-current">
+            <path d="M12 .5C5.649.5.5 5.649.5 12c0 5.084 3.292 9.398 7.861 10.92.575.106.786-.25.786-.556 0-.274-.01-1-.016-1.961-3.198.695-3.873-1.541-3.873-1.541-.523-1.328-1.278-1.682-1.278-1.682-1.045-.714.08-.699.08-.699 1.155.081 1.763 1.186 1.763 1.186 1.027 1.759 2.694 1.251 3.35.957.104-.744.402-1.251.731-1.539-2.553-.29-5.238-1.277-5.238-5.684 0-1.255.448-2.282 1.183-3.087-.119-.29-.513-1.458.112-3.04 0 0 .965-.309 3.162 1.18a10.96 10.96 0 0 1 2.879-.387c.976.004 1.96.132 2.879.387 2.195-1.489 3.159-1.18 3.159-1.18.627 1.582.233 2.75.114 3.04.737.805 1.181 1.832 1.181 3.087 0 4.418-2.689 5.391-5.25 5.676.413.355.781 1.055.781 2.126 0 1.536-.014 2.774-.014 3.151 0 .309.207.668.792.555C20.211 21.395 23.5 17.082 23.5 12 23.5 5.649 18.351.5 12 .5Z"/>
+          </svg>
+          <span>View project on GitHub</span>
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>
