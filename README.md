@@ -6,7 +6,7 @@
 <img src="https://img.shields.io/badge/Tailwind_CSS-3-06B6D4?logo=tailwindcss&amp;logoColor=white" alt="Tailwind CSS" />
 <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome" />
 
-A web application to convert YouTube videos into lightweight MP4 clips and matching WEBP cover frames — right from your browser. Paste a URL, configure the output options and download your clip in seconds.
+A web application to convert YouTube videos into lightweight silent MP4 clips and matching WEBP cover frames — right from your browser. Paste a URL, configure the output options and download your clip in seconds.
 
 ![Screenshot placeholder](./assets/screenshot.png)
 
@@ -15,9 +15,11 @@ A web application to convert YouTube videos into lightweight MP4 clips and match
 ## Features
 
 - **One-click conversion** — paste a YouTube URL and hit convert
-- **Full option control** — FPS, dimensions, clip range and output filename
+- **Full option control** — FPS, dimensions, clip range, cover frame and output filename
 - **Local video preview** — scrub and loop the selected clip before generating the MP4
-- **Cover frame export** — choose a frame inside the clip and save it as `.webp`
+- **Precise controls** — clip and cover sliders support `0.1s` increments
+- **Fast range editing** — left-click the clip track to move the start handle, right-click to move the end handle
+- **Cover frame export** — choose any frame in the full source video and save it as `.webp`
 - **Live log terminal** — real-time conversion output streamed via Server-Sent Events (SSE)
 - **Silent MP4 output** — generated clips are exported without audio
 - **MP4 preview** — inline playback and one-click download when done
@@ -36,7 +38,7 @@ A web application to convert YouTube videos into lightweight MP4 clips and match
 | Fonts | Inter + JetBrains Mono |
 | Streaming | Server-Sent Events (SSE) |
 | Runtime | Node.js |
-| Conversion | yt-dlp + ffmpeg |
+| Conversion | yt-dlp + ffmpeg + cwebp |
 
 ---
 
@@ -48,7 +50,7 @@ Make sure the following tools are installed on your machine:
 
 ```bash
 # macOS (Homebrew)
-brew install ffmpeg yt-dlp
+brew install ffmpeg yt-dlp webp
 ```
 
 ### Local environment
@@ -70,6 +72,12 @@ npm start
 ```
 
 The app will be available at `http://localhost:3000`.
+
+If you want the server to reload automatically while editing, use:
+
+```bash
+npm run dev
+```
 
 ### With browser cookies
 
@@ -98,8 +106,8 @@ The UI exposes the conversion settings supported by the app:
 | **URL** | YouTube video URL | *(required)* |
 | **FPS** | Frames per second of the output MP4 | `30` |
 | **Size** | Output dimensions (e.g. `768x432`) | `768x432` |
-| **Clip range** | Start and end points selected with the dual range slider | full preview duration |
-| **Cover frame** | Frame exported as a `.webp` image with the same basename as the MP4 | midpoint of the selected clip |
+| **Clip range** | Start and end points selected with the dual range slider; supports `0.1s` steps and track clicking | full preview duration |
+| **Cover frame** | Any frame from the full source video, exported as a `.webp` image with the same basename as the MP4 | midpoint of the source video |
 | **Output filename** | Custom name for the `.mp4` file | auto-generated |
 | **Detailed logs** | Show full process output in the log terminal | on |
 
@@ -142,7 +150,10 @@ temporary local video   ← downloaded by yt-dlp with the active auth strategy
   ├─► /api/preview      ← served to the browser as a local HTML5 <video> preview
   │
   ▼
-ffmpeg                  ← trims, scales and encodes the MP4 + WEBP cover
+ffmpeg                  ← trims a silent MP4 and extracts a PNG cover frame
+  │
+  ▼
+cwebp                   ← converts the extracted PNG frame into WEBP
   │
   ▼
 ./output/*             ← served statically at /output/*
@@ -166,6 +177,7 @@ npm run start:chrome
 
 - Output MP4 and WEBP files are **not** git-tracked (`output/` is in `.gitignore`).
 - Generated MP4 clips are exported **without audio**.
+- The cover frame selector is independent from the clip range selector. You can export a WEBP from any moment in the full source video.
 - Some YouTube videos require authenticated cookies for `yt-dlp`. You can place a Netscape-format cookies file at `./yt-dlp-cookies.txt` or set `YT_DLP_COOKIES_FILE` to another path before starting the server.
 - For bot-protected videos, browser cookies are often more reliable than an exported `cookies.txt`. In local mode, use `npm run start:chrome`.
 - The app downloads a temporary local source file before invoking `ffmpeg`, which avoids HLS segment `403` errors from protected YouTube manifests.

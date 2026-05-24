@@ -11,6 +11,7 @@ const OUTPUT_DIR = path.join(__dirname, 'output');
 const DEFAULT_COOKIES_FILE = path.join(__dirname, 'yt-dlp-cookies.txt');
 const YT_DLP_BINARY = process.env.YT_DLP_BINARY || 'yt-dlp';
 const FFMPEG_BINARY = process.env.FFMPEG_BINARY || 'ffmpeg';
+const CWEBP_BINARY = process.env.CWEBP_BINARY || 'cwebp';
 const YT_DLP_COOKIES_FROM_BROWSER = process.env.YT_DLP_COOKIES_FROM_BROWSER;
 const YT_DLP_COOKIES_FROM_BROWSER_PROFILE = process.env.YT_DLP_COOKIES_FROM_BROWSER_PROFILE;
 const PREVIEW_TTL_MS = 30 * 60 * 1000;
@@ -465,6 +466,7 @@ app.post('/api/convert', (req, res) => {
         return;
       }
 
+      const coverPngPath = path.join(tempDir, 'cover-frame.png');
       const coverArgs = [
         '-y',
         '-ss', String(clampedCoverFrameTime),
@@ -472,10 +474,7 @@ app.post('/api/convert', (req, res) => {
         '-vf', `scale=${parsedSize.width}:${parsedSize.height}:flags=lanczos`,
         '-frames:v', '1',
         '-an',
-        '-c:v', 'libwebp',
-        '-quality', '80',
-        '-compression_level', '6',
-        absoluteCoverPath,
+        coverPngPath,
       ];
 
       if (verbose) {
@@ -495,12 +494,43 @@ app.post('/api/convert', (req, res) => {
       coverProc.on('error', failToStart);
 
       coverProc.on('close', (coverCode) => {
-        removePath(tempDir).catch(() => {});
-        if (coverCode === 0 && fs.existsSync(absoluteOutputPath) && fs.existsSync(absoluteCoverPath)) {
-          finishJob(true);
-        } else {
-          finishJob(false, `ffmpeg cover generation failed with code ${coverCode}`);
+        if (coverCode !== 0 || !fs.existsSync(coverPngPath)) {
+          removePath(tempDir).catch(() => {});
+          finishJob(false, `ffmpeg cover frame extraction failed with code ${coverCode}`);
+          return;
         }
+
+        const cwebpArgs = [
+          '-quiet',
+          '-q', '80',
+          coverPngPath,
+          '-o', absoluteCoverPath,
+        ];
+
+        if (verbose) {
+          broadcast({ type: 'log', message: `$ ${CWEBP_BINARY} ${cwebpArgs.join(' ')}\n` });
+        }
+
+        const cwebpProc = spawn(CWEBP_BINARY, cwebpArgs);
+
+        cwebpProc.stdout.on('data', (chunk) => {
+          if (verbose) broadcast({ type: 'log', message: chunk.toString() });
+        });
+
+        cwebpProc.stderr.on('data', (chunk) => {
+          broadcast({ type: 'log', message: chunk.toString() });
+        });
+
+        cwebpProc.on('error', failToStart);
+
+        cwebpProc.on('close', (cwebpCode) => {
+          removePath(tempDir).catch(() => {});
+          if (cwebpCode === 0 && fs.existsSync(absoluteOutputPath) && fs.existsSync(absoluteCoverPath)) {
+            finishJob(true);
+          } else {
+            finishJob(false, `cwebp cover generation failed with code ${cwebpCode}`);
+          }
+        });
       });
     });
   })();

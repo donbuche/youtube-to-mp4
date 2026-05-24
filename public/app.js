@@ -31,12 +31,14 @@ const previewPlaceholder = document.getElementById('video-preview-placeholder');
 const beginTimeInput  = document.getElementById('beginTime');
 const beginTimeRange  = document.getElementById('beginTimeRange');
 const endTimeRange    = document.getElementById('endTimeRange');
+const clipRangeTrack  = document.getElementById('clip-range-track');
 const coverFrameRange = document.getElementById('coverFrameRange');
 const coverFrameInput = document.getElementById('coverFrameTime');
 const coverFrameValue = document.getElementById('coverFrameValue');
 const beginTimeValue  = document.getElementById('beginTimeValue');
 const beginTimeMax    = document.getElementById('beginTimeMax');
 const rangeSelection  = document.getElementById('rangeSelection');
+const rangePlaybackProgress = document.getElementById('rangePlaybackProgress');
 const rangeStartLabel = document.getElementById('rangeStartLabel');
 const rangeDurationLabel = document.getElementById('rangeDurationLabel');
 const rangeEndLabel   = document.getElementById('rangeEndLabel');
@@ -155,8 +157,21 @@ function syncCoverFrameRange(preferredValue = null) {
   coverFrameValue.textContent = formatSeconds(nextValue);
 }
 
+function resetRangePlaybackProgress() {
+  rangePlaybackProgress.style.width = '0%';
+}
+
+function updateRangePlaybackProgress(currentTime) {
+  const start = Number(beginTimeRange.value || 0);
+  const end = Number(endTimeRange.value || start + SLIDER_STEP);
+  const duration = Math.max(SLIDER_STEP, end - start);
+  const progress = ((currentTime - start) / duration) * 100;
+  rangePlaybackProgress.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+}
+
 function stopPreviewLoop() {
   previewLoopActive = false;
+  resetRangePlaybackProgress();
 
   previewLoopLabel.textContent = 'Play clip';
   previewLoopToggle.querySelector('[data-lucide]')?.setAttribute('data-lucide', 'play');
@@ -192,6 +207,7 @@ function startPreviewLoop() {
   previewPlaceholder.classList.add('hidden');
   previewPlayerHost.currentTime = start;
   previewPlayerHost.muted = previewMuted;
+  updateRangePlaybackProgress(start);
   previewPlayerHost.play().catch(() => {
     stopPreviewLoop();
   });
@@ -204,6 +220,7 @@ function refreshPreviewFrame(second) {
     previewPlayerHost.classList.remove('hidden');
     previewPlayerHost.currentTime = second;
     previewPlayerHost.pause();
+    resetRangePlaybackProgress();
   }
 }
 
@@ -236,6 +253,7 @@ function resetPreview() {
   previewMuted = true;
   currentPreviewSourceUrl = '';
   stopPreviewLoop();
+  resetRangePlaybackProgress();
   beginTimeRange.max = '0';
   endTimeRange.max = '0';
   beginTimeRange.value = '0';
@@ -284,6 +302,44 @@ function handleEndRangeInput() {
   endTimeRange.value = end.toFixed(1);
   updateRangeVisuals();
   stopPreviewLoop();
+}
+
+function getTrackTimeFromPointer(clientX) {
+  const rect = clipRangeTrack.getBoundingClientRect();
+  const ratio = rect.width > 0 ? (clientX - rect.left) / rect.width : 0;
+  const boundedRatio = Math.min(1, Math.max(0, ratio));
+  const max = Math.max(0, Number(beginTimeRange.max) || 0);
+  return roundToStep(boundedRatio * max);
+}
+
+function handleClipTrackLeftClick(event) {
+  if (event.target.closest('input[type="range"]')) return;
+
+  const max = Math.max(0, Number(beginTimeRange.max) || 0);
+  const nextStart = Math.min(Math.max(0, getTrackTimeFromPointer(event.clientX)), max);
+  const currentEnd = Math.max(0, Number(endTimeRange.value) || 0);
+  const nextEnd = roundToStep(Math.min(max, Math.max(currentEnd, nextStart + SLIDER_STEP)));
+
+  beginTimeRange.value = nextStart.toFixed(1);
+  endTimeRange.value = nextEnd.toFixed(1);
+  updateRangeVisuals();
+  refreshPreviewFrame(nextStart);
+}
+
+function handleClipTrackRightClick(event) {
+  if (event.target.closest('input[type="range"]')) return;
+
+  event.preventDefault();
+
+  const max = Math.max(0, Number(endTimeRange.max) || 0);
+  const nextEnd = Math.min(Math.max(0, getTrackTimeFromPointer(event.clientX)), max);
+  const currentStart = Math.max(0, Number(beginTimeRange.value) || 0);
+  const nextStart = roundToStep(Math.max(0, Math.min(currentStart, nextEnd - SLIDER_STEP)));
+
+  beginTimeRange.value = nextStart.toFixed(1);
+  endTimeRange.value = Math.max(nextEnd, nextStart + SLIDER_STEP).toFixed(1);
+  updateRangeVisuals();
+  refreshPreviewFrame(Number(endTimeRange.value));
 }
 
 function handleCoverFrameInput() {
@@ -392,6 +448,8 @@ urlInput.addEventListener('input', () => {
 
 beginTimeRange.addEventListener('input', handleStartRangeInput);
 endTimeRange.addEventListener('input', handleEndRangeInput);
+clipRangeTrack.addEventListener('click', handleClipTrackLeftClick);
+clipRangeTrack.addEventListener('contextmenu', handleClipTrackRightClick);
 coverFrameRange.addEventListener('input', handleCoverFrameInput);
 previewLoopToggle.addEventListener('click', () => {
   if (previewLoopActive) {
@@ -423,7 +481,9 @@ previewPlayerHost.addEventListener('timeupdate', () => {
   if (previewLoopActive) {
     const start = Number(beginTimeRange.value || 0);
     const end = Number(endTimeRange.value || start + 1);
+    updateRangePlaybackProgress(previewPlayerHost.currentTime);
     if (previewPlayerHost.currentTime >= end) {
+      updateRangePlaybackProgress(end);
       previewPlayerHost.currentTime = start;
       previewPlayerHost.play().catch(() => {
         stopPreviewLoop();
