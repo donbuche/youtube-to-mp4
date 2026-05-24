@@ -31,6 +31,9 @@ const previewPlaceholder = document.getElementById('video-preview-placeholder');
 const beginTimeInput  = document.getElementById('beginTime');
 const beginTimeRange  = document.getElementById('beginTimeRange');
 const endTimeRange    = document.getElementById('endTimeRange');
+const coverFrameRange = document.getElementById('coverFrameRange');
+const coverFrameInput = document.getElementById('coverFrameTime');
+const coverFrameValue = document.getElementById('coverFrameValue');
 const beginTimeValue  = document.getElementById('beginTimeValue');
 const beginTimeMax    = document.getElementById('beginTimeMax');
 const rangeSelection  = document.getElementById('rangeSelection');
@@ -52,6 +55,7 @@ const statusText      = document.getElementById('status-text');
 const resultCard      = document.getElementById('result-card');
 const resultVideo     = document.getElementById('result-video');
 const downloadBtn     = document.getElementById('download-btn');
+const downloadCoverBtn = document.getElementById('download-cover-btn');
 const newConvBtn      = document.getElementById('new-conversion-btn');
 
 const errorCard       = document.getElementById('error-card');
@@ -69,16 +73,30 @@ let previewMuted      = true;
 let previewRequestTimer = null;
 let previewAbortController = null;
 let currentPreviewSourceUrl = '';
+const SLIDER_STEP = 0.1;
 
 // ── Helpers ────────────────────────────────────────────────
 function show(el)  { el.classList.remove('hidden'); }
 function hide(el)  { el.classList.add('hidden'); }
 
 function formatSeconds(value) {
-  const total = Math.max(0, Math.floor(Number(value) || 0));
+  const total = Math.max(0, Number(value) || 0);
   const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, '0')}` : `${seconds}s`;
+  const seconds = total - (minutes * 60);
+  const normalizedSeconds = Number(seconds.toFixed(1));
+
+  if (minutes > 0) {
+    const secondsLabel = normalizedSeconds < 10
+      ? `0${normalizedSeconds.toFixed(1)}`
+      : normalizedSeconds.toFixed(1);
+    return `${minutes}:${secondsLabel}`;
+  }
+
+  return `${normalizedSeconds.toFixed(1)}s`;
+}
+
+function roundToStep(value) {
+  return Math.round((Number(value) || 0) / SLIDER_STEP) * SLIDER_STEP;
 }
 
 function extractYouTubeVideoId(value) {
@@ -105,12 +123,12 @@ function extractYouTubeVideoId(value) {
 
 function updateRangeVisuals() {
   const max = Math.max(0, Number(beginTimeRange.max) || 0);
-  const start = Math.max(0, Number(beginTimeRange.value) || 0);
-  const end = Math.min(max, Math.max(start + 1, Number(endTimeRange.value) || start + 1));
-  const duration = Math.max(1, end - start);
+  const start = roundToStep(Math.max(0, Number(beginTimeRange.value) || 0));
+  const end = roundToStep(Math.min(max, Math.max(start + SLIDER_STEP, Number(endTimeRange.value) || start + SLIDER_STEP)));
+  const duration = roundToStep(Math.max(SLIDER_STEP, end - start));
 
-  beginTimeInput.value = String(start);
-  durationInput.value = String(duration);
+  beginTimeInput.value = start.toFixed(1);
+  durationInput.value = duration.toFixed(1);
   beginTimeValue.textContent = formatSeconds(start);
   beginTimeMax.textContent = formatSeconds(previewDurationLimit || max);
   rangeStartLabel.textContent = `Start ${formatSeconds(start)}`;
@@ -122,6 +140,19 @@ function updateRangeVisuals() {
   const endPercent = (end / denominator) * 100;
   rangeSelection.style.left = `${startPercent}%`;
   rangeSelection.style.width = `${Math.max(endPercent - startPercent, 0)}%`;
+}
+
+function syncCoverFrameRange(preferredValue = null) {
+  const maxCoverValue = roundToStep(Math.max(0, previewDurationLimit));
+  const defaultValue = roundToStep(maxCoverValue / 2);
+  const requested = preferredValue !== null ? Number(preferredValue) : Number(coverFrameRange.value || defaultValue);
+  const nextValue = roundToStep(Math.min(maxCoverValue, Math.max(0, Number.isFinite(requested) ? requested : defaultValue)));
+
+  coverFrameRange.min = '0';
+  coverFrameRange.max = maxCoverValue.toFixed(1);
+  coverFrameRange.value = nextValue.toFixed(1);
+  coverFrameInput.value = nextValue.toFixed(1);
+  coverFrameValue.textContent = formatSeconds(nextValue);
 }
 
 function stopPreviewLoop() {
@@ -177,19 +208,21 @@ function refreshPreviewFrame(second) {
 }
 
 function setPreviewDuration(duration) {
-  previewDurationLimit = Math.max(0, Math.floor(duration || 0));
+  const preferredCoverFrameValue = Number(coverFrameInput.value || 0);
+  previewDurationLimit = roundToStep(Math.max(0, Number(duration) || 0));
   const maxValue = previewDurationLimit;
   const previousMax = Math.max(0, Number(beginTimeRange.max) || 0);
-  const currentStart = previousMax > 0 ? Math.min(Number(beginTimeRange.value || 0), maxValue) : 0;
+  const currentStart = previousMax > 0 ? roundToStep(Math.min(Number(beginTimeRange.value || 0), maxValue)) : 0;
   const currentEnd = previousMax > 0
-    ? Math.min(Math.max(Number(endTimeRange.value || maxValue), currentStart + 1), maxValue)
+    ? roundToStep(Math.min(Math.max(Number(endTimeRange.value || maxValue), currentStart + SLIDER_STEP), maxValue))
     : maxValue;
 
-  beginTimeRange.max = String(maxValue);
-  endTimeRange.max = String(maxValue);
-  beginTimeRange.value = String(currentStart);
-  endTimeRange.value = String(currentEnd);
+  beginTimeRange.max = maxValue.toFixed(1);
+  endTimeRange.max = maxValue.toFixed(1);
+  beginTimeRange.value = currentStart.toFixed(1);
+  endTimeRange.value = currentEnd.toFixed(1);
   updateRangeVisuals();
+  syncCoverFrameRange(preferredCoverFrameValue);
 }
 
 function resetPreview() {
@@ -206,11 +239,16 @@ function resetPreview() {
   beginTimeRange.max = '0';
   endTimeRange.max = '0';
   beginTimeRange.value = '0';
-  endTimeRange.value = '1';
+  endTimeRange.value = SLIDER_STEP.toFixed(1);
+  coverFrameRange.min = '0';
+  coverFrameRange.max = '0';
+  coverFrameRange.value = '0';
+  coverFrameInput.value = '0';
+  coverFrameValue.textContent = '0s';
   updateRangeVisuals();
   previewPlaceholder.innerHTML = `
     <div class="flex items-center gap-2 rounded-full bg-black/40 px-4 py-2 text-sm font-medium backdrop-blur-sm">
-      <i data-lucide="play-circle" class="h-4 w-4"></i>
+      <i data-lucide="loader-2" class="h-4 w-4 spinner"></i>
       Preview loading
     </div>
   `;
@@ -220,32 +258,42 @@ function resetPreview() {
 
 function handleStartRangeInput() {
   const max = Math.max(0, Number(beginTimeRange.max) || 0);
-  const start = Math.min(Math.max(0, Number(beginTimeRange.value) || 0), max);
-  let end = Math.min(Math.max(0, Number(endTimeRange.value) || 0), max);
+  const start = roundToStep(Math.min(Math.max(0, Number(beginTimeRange.value) || 0), max));
+  let end = roundToStep(Math.min(Math.max(0, Number(endTimeRange.value) || 0), max));
 
   if (start >= end) {
-    end = Math.min(max, start + 1);
-    endTimeRange.value = String(end);
+    end = roundToStep(Math.min(max, start + SLIDER_STEP));
+    endTimeRange.value = end.toFixed(1);
   }
 
-  beginTimeRange.value = String(start);
+  beginTimeRange.value = start.toFixed(1);
   updateRangeVisuals();
   refreshPreviewFrame(start);
 }
 
 function handleEndRangeInput() {
   const max = Math.max(0, Number(endTimeRange.max) || 0);
-  let end = Math.min(Math.max(0, Number(endTimeRange.value) || 0), max);
-  let start = Math.min(Math.max(0, Number(beginTimeRange.value) || 0), max);
+  let end = roundToStep(Math.min(Math.max(0, Number(endTimeRange.value) || 0), max));
+  let start = roundToStep(Math.min(Math.max(0, Number(beginTimeRange.value) || 0), max));
 
   if (end <= start) {
-    start = Math.max(0, end - 1);
-    beginTimeRange.value = String(start);
+    start = roundToStep(Math.max(0, end - SLIDER_STEP));
+    beginTimeRange.value = start.toFixed(1);
   }
 
-  endTimeRange.value = String(end);
+  endTimeRange.value = end.toFixed(1);
   updateRangeVisuals();
   stopPreviewLoop();
+}
+
+function handleCoverFrameInput() {
+  const maxCoverValue = Math.max(0, previewDurationLimit);
+  const selected = roundToStep(Math.min(maxCoverValue, Math.max(0, Number(coverFrameRange.value) || 0)));
+
+  coverFrameRange.value = selected.toFixed(1);
+  coverFrameInput.value = selected.toFixed(1);
+  coverFrameValue.textContent = formatSeconds(selected);
+  refreshPreviewFrame(selected);
 }
 
 function setConverting(loading) {
@@ -297,6 +345,8 @@ function resetUI() {
   resultVideo.pause();
   resultVideo.removeAttribute('src');
   resultVideo.load();
+  downloadBtn.removeAttribute('href');
+  downloadCoverBtn.removeAttribute('href');
   logOutput.textContent = '';
   progressBar.style.width = '0%';
   progressBar.classList.remove('bg-green-500', 'bg-red-500');
@@ -342,6 +392,7 @@ urlInput.addEventListener('input', () => {
 
 beginTimeRange.addEventListener('input', handleStartRangeInput);
 endTimeRange.addEventListener('input', handleEndRangeInput);
+coverFrameRange.addEventListener('input', handleCoverFrameInput);
 previewLoopToggle.addEventListener('click', () => {
   if (previewLoopActive) {
     stopPreviewLoop();
@@ -355,15 +406,17 @@ previewSoundToggle.addEventListener('click', () => {
 });
 
 updateRangeVisuals();
+syncCoverFrameRange();
 updatePreviewSoundUI();
 
 previewPlayerHost.addEventListener('loadedmetadata', () => {
   previewReady = true;
   previewPlayerHost.classList.remove('hidden');
   previewPlaceholder.classList.add('hidden');
+  const preferredCoverFrameValue = Number(coverFrameInput.value || 0);
   setPreviewDuration(previewPlayerHost.duration);
   updatePreviewSoundUI();
-  refreshPreviewFrame(Number(beginTimeRange.value || 0));
+  refreshPreviewFrame(Number(coverFrameRange.value || preferredCoverFrameValue || 0));
 });
 
 previewPlayerHost.addEventListener('timeupdate', () => {
@@ -450,6 +503,7 @@ form.addEventListener('submit', async (e) => {
     size:      document.getElementById('size').value     || null,
     beginTime: document.getElementById('beginTime').value !== '' ? document.getElementById('beginTime').value : null,
     duration:  document.getElementById('duration').value  || null,
+    coverFrameTime: document.getElementById('coverFrameTime').value !== '' ? document.getElementById('coverFrameTime').value : null,
     verbose:   document.getElementById('verbose').checked,
   };
 
@@ -503,8 +557,11 @@ form.addEventListener('submit', async (e) => {
       resultVideo.src = `${event.outputPath}?t=${Date.now()}`;
       resultVideo.load();
       downloadBtn.href = event.outputPath;
+      downloadCoverBtn.href = event.coverImagePath;
       const filename = event.outputPath.split('/').pop();
+      const coverFilename = event.coverImagePath.split('/').pop();
       downloadBtn.setAttribute('download', filename);
+      downloadCoverBtn.setAttribute('download', coverFilename);
       show(resultCard);
       resultCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }

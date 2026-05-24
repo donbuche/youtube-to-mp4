@@ -323,7 +323,7 @@ app.get('/api/preview/:previewId', (req, res) => {
 });
 
 app.post('/api/convert', (req, res) => {
-  const { url, output, fps, size, beginTime, duration, verbose } = req.body;
+  const { url, output, fps, size, beginTime, duration, coverFrameTime, verbose } = req.body;
 
   if (!url || !url.trim()) {
     return res.status(400).json({ error: 'YouTube URL is required' });
@@ -335,9 +335,14 @@ app.post('/api/convert', (req, res) => {
     : `${jobId}.mp4`;
   const absoluteOutputPath = path.join(OUTPUT_DIR, outputFilename);
   const publicOutputPath = `/output/${outputFilename}`;
+  const coverFilename = outputFilename.replace(/\.mp4$/i, '.webp');
+  const absoluteCoverPath = path.join(OUTPUT_DIR, coverFilename);
+  const publicCoverPath = `/output/${coverFilename}`;
   const resolvedFps = fps ? Number(fps) : 30;
   const resolvedDuration = duration ? Number(duration) : 15;
   const resolvedBeginTime = beginTime !== undefined && beginTime !== '' ? Number(beginTime) : 3;
+  const defaultCoverFrameTime = resolvedBeginTime + (resolvedDuration / 2);
+  const resolvedCoverFrameTime = coverFrameTime !== undefined && coverFrameTime !== '' ? Number(coverFrameTime) : defaultCoverFrameTime;
   const resolvedSize = (size && size.trim()) ? size.trim() : '768x432';
   const parsedSize = parseSize(resolvedSize);
 
@@ -356,6 +361,12 @@ app.post('/api/convert', (req, res) => {
   if (!Number.isFinite(resolvedBeginTime) || resolvedBeginTime < 0) {
     return res.status(400).json({ error: 'Start offset must be a number greater than or equal to 0' });
   }
+
+  if (!Number.isFinite(resolvedCoverFrameTime) || resolvedCoverFrameTime < 0) {
+    return res.status(400).json({ error: 'Cover frame time must be a number greater than or equal to 0' });
+  }
+
+  const clampedCoverFrameTime = Math.max(0, resolvedCoverFrameTime);
 
   const job = {
     id: jobId,
@@ -381,7 +392,7 @@ app.post('/api/convert', (req, res) => {
   const finishJob = (success, message) => {
     job.status = success ? 'done' : 'error';
     if (success) {
-      broadcast({ type: 'done', outputPath: publicOutputPath });
+      broadcast({ type: 'done', outputPath: publicOutputPath, coverImagePath: publicCoverPath });
     } else {
       broadcast({ type: 'error', message });
     }
@@ -421,16 +432,13 @@ app.post('/api/convert', (req, res) => {
       '-t', String(resolvedDuration),
       '-i', inputPath,
       '-map', '0:v:0',
-      '-map', '0:a:0?',
       '-vf', `fps=${resolvedFps},scale=${parsedSize.width}:${parsedSize.height}:flags=lanczos`,
       '-c:v', 'libx264',
       '-preset', 'medium',
       '-crf', '24',
       '-pix_fmt', 'yuv420p',
       '-movflags', '+faststart',
-      '-c:a', 'aac',
-      '-b:a', '128k',
-      '-shortest',
+      '-an',
       absoluteOutputPath,
     ];
 
@@ -451,12 +459,49 @@ app.post('/api/convert', (req, res) => {
     ffmpegProc.on('error', failToStart);
 
     ffmpegProc.on('close', (ffmpegCode) => {
-      removePath(tempDir).catch(() => {});
-      if (ffmpegCode === 0 && fs.existsSync(absoluteOutputPath)) {
-        finishJob(true);
-      } else {
+      if (ffmpegCode !== 0 || !fs.existsSync(absoluteOutputPath)) {
+        removePath(tempDir).catch(() => {});
         finishJob(false, `ffmpeg failed with code ${ffmpegCode}`);
+        return;
       }
+
+      const coverArgs = [
+        '-y',
+        '-ss', String(clampedCoverFrameTime),
+        '-i', inputPath,
+        '-vf', `scale=${parsedSize.width}:${parsedSize.height}:flags=lanczos`,
+        '-frames:v', '1',
+        '-an',
+        '-c:v', 'libwebp',
+        '-quality', '80',
+        '-compression_level', '6',
+        absoluteCoverPath,
+      ];
+
+      if (verbose) {
+        broadcast({ type: 'log', message: `$ ${FFMPEG_BINARY} ${coverArgs.join(' ')}\n` });
+      }
+
+      const coverProc = spawn(FFMPEG_BINARY, coverArgs);
+
+      coverProc.stdout.on('data', (chunk) => {
+        if (verbose) broadcast({ type: 'log', message: chunk.toString() });
+      });
+
+      coverProc.stderr.on('data', (chunk) => {
+        broadcast({ type: 'log', message: chunk.toString() });
+      });
+
+      coverProc.on('error', failToStart);
+
+      coverProc.on('close', (coverCode) => {
+        removePath(tempDir).catch(() => {});
+        if (coverCode === 0 && fs.existsSync(absoluteOutputPath) && fs.existsSync(absoluteCoverPath)) {
+          finishJob(true);
+        } else {
+          finishJob(false, `ffmpeg cover generation failed with code ${coverCode}`);
+        }
+      });
     });
   })();
 });
