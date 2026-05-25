@@ -6,6 +6,10 @@
 const html = document.documentElement;
 const themeToggle = document.getElementById('theme-toggle');
 
+if ('scrollRestoration' in history) {
+  history.scrollRestoration = 'manual';
+}
+
 const savedTheme = localStorage.getItem('theme');
 if (savedTheme === 'light') html.classList.remove('dark');
 else html.classList.add('dark');
@@ -47,8 +51,10 @@ const previewLoopToggle = document.getElementById('preview-loop-toggle');
 const previewLoopLabel  = document.getElementById('preview-loop-label');
 const previewSoundToggle = document.getElementById('preview-sound-toggle');
 const previewSoundLabel  = document.getElementById('preview-sound-label');
+const verboseToggle    = document.getElementById('verbose');
 
 const progressCard    = document.getElementById('progress-card');
+const logsPanel       = document.getElementById('logs-panel');
 const logOutput       = document.getElementById('log-output');
 const progressBar     = document.getElementById('progress-bar');
 const statusBadge     = document.getElementById('status-badge');
@@ -80,6 +86,11 @@ const SLIDER_STEP = 0.1;
 // ── Helpers ────────────────────────────────────────────────
 function show(el)  { el.classList.remove('hidden'); }
 function hide(el)  { el.classList.add('hidden'); }
+
+function updateLogsVisibility() {
+  if (verboseToggle.checked) show(logsPanel);
+  else hide(logsPanel);
+}
 
 function formatSeconds(value) {
   const total = Math.max(0, Number(value) || 0);
@@ -416,6 +427,7 @@ function resetUI() {
     activeEventSource = null;
   }
   clearInterval(progressInterval);
+  updateLogsVisibility();
 }
 
 function showError(msg) {
@@ -462,10 +474,12 @@ previewSoundToggle.addEventListener('click', () => {
   previewMuted = !previewMuted;
   updatePreviewSoundUI();
 });
+verboseToggle.addEventListener('change', updateLogsVisibility);
 
 updateRangeVisuals();
 syncCoverFrameRange();
 updatePreviewSoundUI();
+updateLogsVisibility();
 
 previewPlayerHost.addEventListener('loadedmetadata', () => {
   previewReady = true;
@@ -642,9 +656,8 @@ form.addEventListener('submit', async (e) => {
 
 // ── New conversion ─────────────────────────────────────────
 newConvBtn.addEventListener('click', () => {
-  resetUI();
-  setConverting(false);
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  window.scrollTo(0, 0);
+  window.location.reload();
 });
 
 retryBtn.addEventListener('click', () => {
